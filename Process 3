@@ -1,0 +1,112 @@
+/*
+PURPOSE: - Remove non-master account
+	 - Save storage costs
+
+RULES: Remove inactive customer for 6 months and have no financial contributions
+
+
+The following script will:
+1. As many accounts have contact details but lack of other biodemographic details, match customers with appropriate info
+2. Remove inactive customer for 6 months and have no financial contributions
+3. Merge duplicate customer accounts to maintain 1 master account only
+
+CREATED: 8/26/2021 - An Nguyen
+
+*/
+
+
+-- Current list of Supporters that are lack of CRM_ID on EN --
+select custId
+	 , First_Name
+	 , Last_Name
+	 , email
+	 , case when isnumeric(substring(email,X,Y)) = 1 then substring(email,X,Y) else NULL end unique
+	 , substring(email, 1, charindex('@', email) - 1) per_add
+	 , case when referral is NULL then NULL else substring(referral, charindex('~', referral) + 1, Len(referral)) end as refID
+	 , case when referral is NULL then NULL else substring(referral, 1, charindex('~', referral) - 1) end as sender_email
+into #bio_missing
+from cust_list
+where crmID is NULL;
+
+
+--------------------------------------- Matching People -----------------------------------------------
+
+--------- LIST of matched PEOPLE -------------------------------------
+select distinct * 
+into #matched_ppl
+from (
+	-- People with biodemographic info --
+	select custID, crmID, email
+	from cust_list
+	where crmID is not NULL
+  union
+
+--------- Matching people without biodemographic info ---------------
+    ------- (b) Ref + relationship ------
+	select a.custId, a.crmID, a.email
+	from(
+		select m.custId
+		     , m.email
+		     , c.crmId
+		     , e.custId
+		     , m.refID
+		     , m.sender_email
+		from #bio_missing m
+		inner join email e on e.email = m.email
+		inner join contact c on c.Id = e.custId
+		)a
+	inner join email e on e.email = a.sender_email
+	inner join relationship r on r.p2Id = e.custid
+	where a.custId = r.p1Id
+  union
+    ------- (a) address + name -------
+	select m.custID
+	     , cl.crmID
+	     , m.email
+	from cust_list cl
+	inner join #bio_missing m on substring(cl.email, 1, charindex('@', cl.email) - 1) = substring(m.email, 1, charindex('@', m.email) - 1)
+	where m.email like '%xxxxxxx.yyy'
+	and cl.email like '%xxxxxxx.yyy'
+	and cl.crmID is not NULL
+)k
+
+
+----------------------------- STEP 2 - Check duplicate and remove duplicate -----------------------------------------------------
+select * 
+into #flag_ppl
+from(
+	select mp.custID, mp.crmID, c.custId, mp.email
+	     , case when mp.email = c.email then 1 else 0 end IsPref
+	     , i.LastDate
+	     , case when datediff(month,i.LastDate, getdate()) <= 6 then 1 else 0 end IsLessThan6Months
+	     , case when i1.CampaignType like 'F%' then 1 else 0 end HasFinancialContribution
+	from #matched_ppl mp
+	left join campaign_info i1 on i1.custID = mp.custID and i1.CampaignType like 'F%'
+	inner join (select au_SupporterID
+			             , convert(nvarchar(10), max(DateTime), 126) LastDate 
+		         from campaign_info 
+		         group by custID) i 
+		on i.custID = mp.custID
+	inner join contact c on c.crmID = mp.crmID
+	where mp.crmID in (select crmID
+			                from #matched_ppl
+			                group by crmID 
+			                having count(*) > 1)
+	)d
+
+
+------------------------- Removal ---------------------
+select distinct email
+from #flag_ppl
+where IsLessThan6Months = 0 and HasFinancialContribution = 0
+
+
+------------------------ Merging ---------------
+select distinct crmID
+from #flag_ppl
+where crmID in (select crmID 
+		             from #flag_ppl
+		             where IsLessThan6Months = 1 or HasFinancialContribution = 1
+		             group by crmID
+		             having count(*) > 1)
+order by crmID;
