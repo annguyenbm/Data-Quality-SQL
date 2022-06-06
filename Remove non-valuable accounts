@@ -1,0 +1,51 @@
+/*
+MAINTENANCE PROCESS 5 - REMOVE ALL NON-OPT
+
+RULES: 
+(1) Insignificant campaign: 'Uxx', 'Exx', 'Mxx', 'Qxx', 'Mxy', 'Myz'
+(2) Remove accounts that have all engaging flags = FALSE
+(3) Check against platform API before proceeding the removal
+
+UPDATED BY: 10/10/2021 - An Nguyen
+
+*/
+
+-- Step 1 : identify who opt out from all --
+SELECT p.custId
+     , c.crmID
+     , COUNT(*) cnt
+INTO #optout
+FROM pref p
+INNER JOIN preftype pt ON p.TypeId = pt.typeId
+INNER JOIN contact c ON p.custId = c.Id
+WHERE p.pending = 'No' AND p.status = 'Yes' 			 -- active
+    AND CHARINDEX('de', pt.integrated) > 0
+    AND p.flags = 'FALSE'
+GROUP BY p.custId, c.crmID
+HAVING COUNT(*) >= 16
+ORDER BY cnt;
+
+
+-- Step 2 : Compare the list against marketing platform --
+WITH custs AS (
+	SELECT cl.*
+	FROM #optout o
+	INNER JOIN cust_list cl ON cl.Id = o.Id
+	)
+, trans AS (
+	SELECT s.custId
+	     , s.email
+	     , i.CampaignType
+	     , count(i.CampaignType) cnt
+	FROM campaign_info i
+	RIGHT JOIN custs s ON i.custId = s.custId
+	AND i.CampaignType NOT IN ('Uxx', 'Exx', 'Mxx', 'Qxx', 'Mxy', 'Myz')
+	GROUP BY s.custId, s.email, i.CampaignType
+	)
+
+-- Run the API python files then extract the result --
+SELECT email
+FROM trans
+WHERE custId not in (SELECT id from api)
+GROUP BY email
+HAVING sum(cnt) = 0;
