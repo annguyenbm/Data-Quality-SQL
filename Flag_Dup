@@ -1,0 +1,15 @@
+SELECT * 
+FROM (
+	SELECT tmp.*
+       , row_number() over(partition by c.Id order by tmp.pref_addr_rank DESC, tmp.ModifiedDate DESC) rn     -- flag Duplicate
+	     , c.address, c.Id, c.name, c.type
+	FROM tmp 
+	JOIN contact c
+     ON tmp.Id = c.Id
+       AND c.iscurrent = 'Yes' AND c.isactive = 'Yes'
+       AND c.systemstatus = 'Active'
+	WHERE c.address IS NULL
+	OR convert(nvarchar(10),tmp.CreatedOn,126) = 'yyyy-mm-dd'
+    OR charindex(tmp.address, c.address) = 0 or charindex(c.address, tmp.address) = 0
+	)t1
+WHERE rn = 1;
