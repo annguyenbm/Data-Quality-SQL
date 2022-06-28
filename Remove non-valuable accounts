@@ -1,6 +1,4 @@
 /*
-MAINTENANCE PROCESS 5 - REMOVE ALL NON-OPT
-
 RULES: 
 (1) Insignificant campaign: 'Uxx', 'Exx', 'Mxx', 'Qxx', 'Mxy', 'Myz'
 (2) Remove accounts that have all engaging flags = FALSE
@@ -18,8 +16,8 @@ INTO #optout
 FROM pref p
 INNER JOIN preftype pt ON p.TypeId = pt.typeId
 INNER JOIN contact c ON p.custId = c.Id
-WHERE p.pending = 'No' AND p.status = 'Yes' 			 -- active
-    AND CHARINDEX('de', pt.integrated) > 0
+WHERE p.pending = 'No' AND p.isactive = 'Yes' 
+    AND CHARINDEX('de', pt.tag) > 0
     AND p.flags = 'FALSE'
 GROUP BY p.custId, c.crmID
 HAVING COUNT(*) >= 16
