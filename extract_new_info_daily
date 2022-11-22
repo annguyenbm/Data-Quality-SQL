@@ -33,6 +33,7 @@ BEGIN
 	)
   
   SELECT contact, name
+  into daily_smp
   FROM new_ls;
   
 END
