@@ -1,0 +1,38 @@
+DROP TABLE IF EXISTS daily_smp;
+
+DECLARE @day_limit int; SET @day_limit = 1; --set day limit for list last modified on
+
+DECLARE @modified_lists INT;
+
+SET @modified_lists = (
+	SELECT COUNT(*) cnt
+	FROM l
+	INNER JOIN m ON l.Id = m.Id
+		AND m.status = 1
+	WHERE l.complete = 1
+		AND l.type = 'aaabbbccc'
+		AND l.status = 1
+		AND l.expiration >= GETDATE() --expiration date not passed
+		AND (DATEDIFF(DAY,l.modified_date,GETDATE()) <= @day_limit OR DATEDIFF(DAY,m.modified_date,GETDATE()) <= @day_limit))
+	;
+
+IF @modified_lists > 0
+BEGIN
+
+  WITH new_ls as (
+  SELECT m.contact, STRING_AGG(l.name,'|') name
+			-- INTO #new_ls
+			FROM l
+			INNER JOIN m ON l.Id = m.Id
+				AND m.status = 1
+			WHERE l.complete = 1
+				AND l.purpose = 'aaabbbccc'
+				AND l.status = 1
+				AND l.expiration >= GETDATE() --expiration date not passed
+			GROUP BY m.contact
+	)
+  
+  SELECT contact, name
+  FROM new_ls;
+  
+END
